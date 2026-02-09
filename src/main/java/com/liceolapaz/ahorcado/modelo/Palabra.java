@@ -1,4 +1,4 @@
-package es.liceolapaz.ahorcado.modelo;
+package com.liceolapaz.ahorcado.modelo;
 
 import jakarta.persistence.*;
 
