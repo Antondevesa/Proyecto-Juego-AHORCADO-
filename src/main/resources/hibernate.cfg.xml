@@ -12,5 +12,8 @@
         <property name="hbm2ddl.auto">update</property>
 
         <mapping class="com.liceolapaz.ahorcado.modelo.Palabra"/>
+        <mapping class="com.liceolapaz.ahorcado.modelo.Jugador"/>
+        <mapping class="com.liceolapaz.ahorcado.modelo.Puntuacion"/>
+
     </session-factory>
 </hibernate-configuration>
