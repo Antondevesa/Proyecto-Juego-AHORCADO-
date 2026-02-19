@@ -24,6 +24,7 @@ public class ServidorAhorcado {
                 Socket socketCliente = serverSocket.accept();
                 System.out.println("Nuevo cliente conectado: " + socketCliente.getInetAddress());
 
+                new Thread(new HiloServidor(socketCliente)).start();
             }
         } catch (IOException e) {
             System.err.println("Error al iniciar servidor: " + e.getMessage());
