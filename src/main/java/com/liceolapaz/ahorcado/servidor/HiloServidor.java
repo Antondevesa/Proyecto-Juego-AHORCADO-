@@ -19,7 +19,6 @@ public class HiloServidor implements Runnable {
     private DataInputStream in;
     private static SessionFactory factory;
 
-    // Bloque estático para arrancar Hibernate una sola vez
     static {
         try {
             factory = new Configuration().configure("hibernate.cfg.xml").buildSessionFactory();
