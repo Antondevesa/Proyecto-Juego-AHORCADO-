@@ -81,12 +81,11 @@ public class HiloServidor implements Runnable {
                     juegoTerminado = true;
                 } else {
                     if (acierto) {
-                        mensaje = "✅ ¡Acierto! La letra '" + letra + "' está en la palabra.";
+                        mensaje = "Acierto La letra '" + letra + "' está en la palabra.";
                     } else {
                         intentosRestantes--;
                         if (intentosRestantes == 0) {
                             mensaje = "HAS PERDIDO Te has quedado sin intentos. La palabra era: " + palabraReal;
-                            // Revelamos la palabra completa si pierde
                             tableroActualizado = formatearPalabra(palabraReal.toCharArray());
                             juegoTerminado = true;
                         } else {
