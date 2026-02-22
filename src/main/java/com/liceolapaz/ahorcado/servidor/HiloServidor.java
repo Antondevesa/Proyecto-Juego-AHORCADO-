@@ -39,7 +39,11 @@ public class HiloServidor implements Runnable {
             in = new DataInputStream(socket.getInputStream());
             out = new DataOutputStream(socket.getOutputStream());
 
-            String nombreJugador = in.readUTF();
+            String datosRecibidos = in.readUTF();
+            String[] partes = datosRecibidos.split("\\|");
+            String nombreJugador = partes[0];
+            String modoJuego = partes.length > 1 ? partes[1] : "1";
+
             Jugador jugador = gestionarJugador(nombreJugador);
 
             long idAleatorio = (long) (Math.random() * 50) + 1;
@@ -52,23 +56,28 @@ public class HiloServidor implements Runnable {
             for (int i = 0; i < letrasDescubiertas.length; i++) {
                 letrasDescubiertas[i] = '_';
             }
-
-            out.writeUTF("¡Bienvenido " + jugador.getNombre() + "!\nTienes " + intentosMaximos + " intentos.");
+            if (modoJuego.equals("2")) {
+                out.writeUTF("[TURNO] ¡Bienvenido " + jugador.getNombre() + "!\nEl modo 2P está en camino. Tienes " + intentosMaximos + " intentos.");
+            } else {
+                out.writeUTF("[TURNO] ¡Bienvenido " + jugador.getNombre() + "!\nTienes " + intentosMaximos + " intentos para adivinar.");
+            }
             out.writeUTF(formatearPalabra(letrasDescubiertas));
 
             boolean juegoTerminado = false;
 
             while (!juegoTerminado && intentosRestantes > 0) {
                 String inputRecibido = in.readUTF();
+
                 if (inputRecibido.equals("-CANCELAR-")) {
-                    System.out.println("Partida cancelada por: " + jugador.getNombre());
+                    System.out.println("⚠️ Partida cancelada por: " + jugador.getNombre());
                     break;
                 } else if (inputRecibido.equals("-PUNTUACION-")) {
                     int puntosTotales = obtenerPuntuacionTotal(jugador.getId());
-                    out.writeUTF("PUNTUACIÓN GLOBAL: Tienes un total de " + puntosTotales + " puntos.");
+                    out.writeUTF("[TURNO] PUNTUACIÓN GLOBAL: Tienes un total de " + puntosTotales + " puntos.");
                     out.writeUTF(formatearPalabra(letrasDescubiertas));
                     continue;
                 }
+
                 char letra = inputRecibido.charAt(0);
                 boolean acierto = false;
 
@@ -81,24 +90,25 @@ public class HiloServidor implements Runnable {
 
                 String tableroActualizado = formatearPalabra(letrasDescubiertas);
                 String mensaje = "";
+
                 if (String.valueOf(letrasDescubiertas).equals(palabraReal)) {
                     int puntosGanados = (palabraReal.length() < 10) ? 1 : 2;
-                    guardarPartida(jugador, true, puntosGanados); // Guardar en BD
+                    guardarPartida(jugador, true, puntosGanados);
 
-                    mensaje = "HAS GANADO (+" + puntosGanados + " pts). La palabra era: " + palabraReal;
+                    mensaje = "[TURNO] ¡HAS GANADO! (+" + puntosGanados + " pts). La palabra era: " + palabraReal;
                     juegoTerminado = true;
                 } else {
                     if (acierto) {
-                        mensaje = "Acierto. La letra '" + letra + "' está en la palabra.";
+                        mensaje = "[TURNO] ¡Acierto! La letra '" + letra + "' está en la palabra.";
                     } else {
                         intentosRestantes--;
                         if (intentosRestantes == 0) {
                             guardarPartida(jugador, false, 0);
-                            mensaje = "HAS PERDIDO. Te has quedado sin intentos. La palabra era: " + palabraReal;
+                            mensaje = "[TURNO] ¡HAS PERDIDO! Sin intentos. La palabra era: " + palabraReal;
                             tableroActualizado = formatearPalabra(palabraReal.toCharArray());
                             juegoTerminado = true;
                         } else {
-                            mensaje = "Fallo. La letra '" + letra + "' no está. Te quedan " + intentosRestantes + " intentos.";
+                            mensaje = "[TURNO] Fallo. La letra '" + letra + "' no está. Te quedan " + intentosRestantes + " intentos.";
                         }
                     }
                 }
@@ -117,8 +127,6 @@ public class HiloServidor implements Runnable {
             }
         }
     }
-
-
     private Jugador gestionarJugador(String nombre) {
         Session session = factory.openSession();
         Transaction tx = null;
@@ -131,6 +139,9 @@ public class HiloServidor implements Runnable {
             if (j == null) {
                 j = new Jugador(nombre);
                 session.persist(j);
+                System.out.println("Nuevo jugador registrado: " + nombre);
+            } else {
+                System.out.println("Jugador habitual conectado: " + nombre);
             }
             tx.commit();
         } catch (Exception e) {
@@ -178,6 +189,7 @@ public class HiloServidor implements Runnable {
             session.close();
         }
     }
+
     private int obtenerPuntuacionTotal(Long idJugador) {
         Session session = factory.openSession();
         int total = 0;
