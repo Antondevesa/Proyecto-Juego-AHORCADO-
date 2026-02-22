@@ -5,8 +5,8 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
-        import javafx.scene.layout.*;
-        import javafx.scene.text.Font;
+import javafx.scene.layout.*;
+import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.stage.Stage;
 
@@ -19,6 +19,9 @@ public class VentanaInicioFX extends Application {
     private Label lblPalabraOculta;
     private TextField txtLetra;
     private TextArea areaMensajes;
+    private javax.net.ssl.SSLSocket socket;
+    private java.io.DataInputStream in;
+    private java.io.DataOutputStream out;
 
     @Override
     public void start(Stage primaryStage) {
@@ -49,10 +52,11 @@ public class VentanaInicioFX extends Application {
         Button btnIniciar = new Button("Iniciar Partida");
 
         btnIniciar.setOnAction(e -> {
-            if (!txtNombre.getText().trim().isEmpty()) {
-                ventanaPrincipal.setScene(escenaJuego);
+            String nombre = txtNombre.getText().trim();
+            if (!nombre.isEmpty()) {
+                conectarAlServidor(nombre);
             } else {
-                mostrarAlerta("Error", "Por favor, introduce tu nombre.");
+                mostrarAlerta("Error", "Introduce tu nombre.");
             }
         });
 
@@ -97,6 +101,30 @@ public class VentanaInicioFX extends Application {
         btnCancelar.setOnAction(e -> ventanaPrincipal.setScene(escenaInicio));
 
         escenaJuego = new Scene(layoutJuego, 450, 400);
+    }
+
+    private void conectarAlServidor(String nombre) {
+        try {
+            System.setProperty("javax.net.ssl.trustStore", "src/main/resources/servidor_keystore.jks");
+            System.setProperty("javax.net.ssl.trustStorePassword", "123456");
+
+            javax.net.ssl.SSLSocketFactory sslFactory = (javax.net.ssl.SSLSocketFactory) javax.net.ssl.SSLSocketFactory.getDefault();
+            socket = (javax.net.ssl.SSLSocket) sslFactory.createSocket("localhost", 65000);
+
+            out = new java.io.DataOutputStream(socket.getOutputStream());
+            in = new java.io.DataInputStream(socket.getInputStream());
+
+            out.writeUTF(nombre);
+
+            String respuesta = in.readUTF();
+
+            areaMensajes.setText(respuesta + "\n");
+            ventanaPrincipal.setScene(escenaJuego);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            mostrarAlerta("Error de Conexión", "No se pudo conectar al servidor.\nAsegúrate de que está encendido.\nDetalle: " + e.getMessage());
+        }
     }
 
     private void mostrarAlerta(String titulo, String mensaje) {
