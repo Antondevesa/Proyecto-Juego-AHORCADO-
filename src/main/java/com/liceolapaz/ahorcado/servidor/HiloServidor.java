@@ -62,11 +62,11 @@ public class HiloServidor implements Runnable {
                 String inputRecibido = in.readUTF();
                 if (inputRecibido.equals("-CANCELAR-")) {
                     System.out.println("Partida cancelada por: " + jugador.getNombre());
-                    break; // Salimos del bucle sin guardar nada
+                    break;
                 } else if (inputRecibido.equals("-PUNTUACION-")) {
                     int puntosTotales = obtenerPuntuacionTotal(jugador.getId());
                     out.writeUTF("PUNTUACIÓN GLOBAL: Tienes un total de " + puntosTotales + " puntos.");
-                    out.writeUTF(formatearPalabra(letrasDescubiertas)); // Reenviamos el tablero intacto
+                    out.writeUTF(formatearPalabra(letrasDescubiertas));
                     continue;
                 }
                 char letra = inputRecibido.charAt(0);
@@ -117,6 +117,8 @@ public class HiloServidor implements Runnable {
             }
         }
     }
+
+
     private Jugador gestionarJugador(String nombre) {
         Session session = factory.openSession();
         Transaction tx = null;
@@ -168,7 +170,7 @@ public class HiloServidor implements Runnable {
             Puntuacion p = new Puntuacion(jugador, LocalDateTime.now(), acierto, puntos);
             session.persist(p);
             tx.commit();
-            System.out.println("💾 Partida guardada en BD para " + jugador.getNombre());
+            System.out.println("Partida guardada en BD para " + jugador.getNombre());
         } catch (Exception e) {
             if (tx != null) tx.rollback();
             e.printStackTrace();
@@ -176,7 +178,6 @@ public class HiloServidor implements Runnable {
             session.close();
         }
     }
-
     private int obtenerPuntuacionTotal(Long idJugador) {
         Session session = factory.openSession();
         int total = 0;
