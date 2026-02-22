@@ -21,8 +21,11 @@ public class VentanaInicioFX extends Application {
     private Scene escenaInicio;
     private Scene escenaJuego;
     private TextField txtNombre;
+    private RadioButton rb1Jugador;
+    private RadioButton rb2Jugadores;
     private Label lblPalabraOculta;
     private TextField txtLetra;
+    private Button btnEnviar;
     private TextArea areaMensajes;
     private SSLSocket socket;
     private DataInputStream in;
@@ -32,10 +35,8 @@ public class VentanaInicioFX extends Application {
     public void start(Stage primaryStage) {
         this.ventanaPrincipal = primaryStage;
         ventanaPrincipal.setTitle("Juego del Ahorcado - Cliente");
-
         crearEscenaInicio();
         crearEscenaJuego();
-
         ventanaPrincipal.setScene(escenaInicio);
         ventanaPrincipal.show();
     }
@@ -54,18 +55,31 @@ public class VentanaInicioFX extends Application {
         txtNombre = new TextField();
         cajaNombre.getChildren().add(txtNombre);
 
+        // SELECTOR DE MODO DE JUEGO
+        HBox cajaModo = new HBox(15);
+        cajaModo.setAlignment(Pos.CENTER);
+        ToggleGroup tgModo = new ToggleGroup();
+        rb1Jugador = new RadioButton("1 Jugador");
+        rb2Jugadores = new RadioButton("2 Jugadores");
+        rb1Jugador.setToggleGroup(tgModo);
+        rb2Jugadores.setToggleGroup(tgModo);
+        rb1Jugador.setSelected(true); // Por defecto 1 Jugador
+        cajaModo.getChildren().addAll(rb1Jugador, rb2Jugadores);
+
         Button btnIniciar = new Button("Iniciar Partida");
 
         btnIniciar.setOnAction(e -> {
             String nombre = txtNombre.getText().trim();
+            String modo = rb1Jugador.isSelected() ? "1" : "2";
+
             if (!nombre.isEmpty()) {
-                conectarAlServidor(nombre);
+                conectarAlServidor(nombre + "|" + modo);
             } else {
                 mostrarAlerta("Error", "Introduce tu nombre");
             }
         });
 
-        layoutInicio.getChildren().addAll(lblTitulo, cajaNombre, btnIniciar);
+        layoutInicio.getChildren().addAll(lblTitulo, cajaNombre, cajaModo, btnIniciar);
         escenaInicio = new Scene(layoutInicio, 450, 400);
     }
 
@@ -91,7 +105,8 @@ public class VentanaInicioFX extends Application {
         panelLetra.getChildren().add(new Label("Letra:"));
         txtLetra = new TextField();
         txtLetra.setPrefWidth(50);
-        Button btnEnviar = new Button("Enviar");
+
+        btnEnviar = new Button("Enviar");
 
         btnEnviar.setOnAction(e -> {
             String letra = txtLetra.getText().trim().toUpperCase();
@@ -99,7 +114,6 @@ public class VentanaInicioFX extends Application {
                 try {
                     out.writeUTF(letra);
                     txtLetra.setText("");
-                    areaMensajes.appendText("Has enviado la letra: " + letra + "\n");
                 } catch (Exception ex) {
                     areaMensajes.appendText("Error al enviar la letra\n");
                 }
@@ -117,42 +131,32 @@ public class VentanaInicioFX extends Application {
 
         btnPuntuacion.setOnAction(e -> {
             try {
-                if (out != null) {
-                    out.writeUTF("-PUNTUACION-");
-                }
-            } catch (Exception ex) {
-                areaMensajes.appendText("Error al solicitar la puntuación.\n");
-            }
+                if (out != null) out.writeUTF("-PUNTUACION-");
+            } catch (Exception ex) {}
         });
 
         btnCancelar.setOnAction(e -> {
             try {
-                if (out != null) {
-                    out.writeUTF("-CANCELAR-");
-                }
-                if (socket != null && !socket.isClosed()) {
-                    socket.close();
-                }
-            } catch (Exception ex) {
-                ex.printStackTrace();
-            }
+                if (out != null) out.writeUTF("-CANCELAR-");
+                if (socket != null && !socket.isClosed()) socket.close();
+            } catch (Exception ex) {}
+
             txtNombre.setText("");
             txtLetra.setDisable(false);
+            btnEnviar.setDisable(false);
             areaMensajes.setText("");
             lblPalabraOculta.setText("_ _ _ _ _ _");
-
             ventanaPrincipal.setScene(escenaInicio);
         });
 
         panelBotonesExtra.getChildren().addAll(btnCancelar, btnPuntuacion);
-
         panelControles.getChildren().addAll(panelLetra, panelBotonesExtra);
         layoutJuego.setBottom(panelControles);
 
-        escenaJuego = new Scene(layoutJuego, 450, 400);
+        escenaJuego = new Scene(layoutJuego, 450, 450);
     }
 
-    private void conectarAlServidor(String nombre) {
+    private void conectarAlServidor(String datosConexion) {
         try {
             System.setProperty("javax.net.ssl.trustStore", "src/main/resources/servidor_keystore.jks");
             System.setProperty("javax.net.ssl.trustStorePassword", "123456");
@@ -163,10 +167,15 @@ public class VentanaInicioFX extends Application {
             out = new DataOutputStream(socket.getOutputStream());
             in = new DataInputStream(socket.getInputStream());
 
-            out.writeUTF(nombre);
+            out.writeUTF(datosConexion);
 
             String mensajeBienvenida = in.readUTF();
             String palabraOcultaInicial = in.readUTF();
+
+            txtLetra.setDisable(false);
+            btnEnviar.setDisable(false);
+
+            mensajeBienvenida = mensajeBienvenida.replace("[TURNO]", "").trim();
 
             areaMensajes.setText(mensajeBienvenida + "\n");
             lblPalabraOculta.setText(palabraOcultaInicial);
@@ -176,22 +185,33 @@ public class VentanaInicioFX extends Application {
             Thread hiloEscucha = new Thread(() -> {
                 try {
                     while (true) {
-                        String mensaje = in.readUTF();
+                        String mensajeRecibido = in.readUTF();
                         String tablero = in.readUTF();
 
                         Platform.runLater(() -> {
-                            areaMensajes.appendText(mensaje + "\n");
+                            String mensajeProcesado = mensajeRecibido;
+
+                            if (mensajeProcesado.startsWith("[TURNO]")) {
+                                txtLetra.setDisable(false);
+                                btnEnviar.setDisable(false);
+                                mensajeProcesado = mensajeProcesado.replace("[TURNO]", "").trim();
+                            } else if (mensajeProcesado.startsWith("[ESPERA]")) {
+                                txtLetra.setDisable(true);
+                                btnEnviar.setDisable(true);
+                                mensajeProcesado = mensajeProcesado.replace("[ESPERA]", "").trim();
+                            }
+
+                            areaMensajes.appendText(mensajeProcesado + "\n");
                             lblPalabraOculta.setText(tablero);
 
-                            if (mensaje.contains("¡HAS GANADO!") || mensaje.contains("¡HAS PERDIDO!")) {
+                            if (mensajeProcesado.contains("¡HAS GANADO!") || mensajeProcesado.contains("¡HAS PERDIDO!")) {
                                 txtLetra.setDisable(true);
+                                btnEnviar.setDisable(true);
                             }
                         });
                     }
                 } catch (Exception e) {
-                    Platform.runLater(() ->
-                            areaMensajes.appendText("Desconectado del servidor\n")
-                    );
+                    Platform.runLater(() -> areaMensajes.appendText("Desconectado del servidor\n"));
                 }
             });
             hiloEscucha.setDaemon(true);
