@@ -1,6 +1,7 @@
 package com.liceolapaz.ahorcado.cliente;
 
 import javafx.application.Application;
+import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
@@ -9,6 +10,10 @@ import javafx.scene.layout.*;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.stage.Stage;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import javax.net.ssl.SSLSocket;
+import javax.net.ssl.SSLSocketFactory;
 
 public class VentanaInicioFX extends Application {
 
@@ -19,9 +24,9 @@ public class VentanaInicioFX extends Application {
     private Label lblPalabraOculta;
     private TextField txtLetra;
     private TextArea areaMensajes;
-    private javax.net.ssl.SSLSocket socket;
-    private java.io.DataInputStream in;
-    private java.io.DataOutputStream out;
+    private SSLSocket socket;
+    private DataInputStream in;
+    private DataOutputStream out;
 
     @Override
     public void start(Stage primaryStage) {
@@ -96,7 +101,7 @@ public class VentanaInicioFX extends Application {
                     txtLetra.setText("");
                     areaMensajes.appendText("Has enviado la letra: " + letra + "\n");
                 } catch (Exception ex) {
-                    areaMensajes.appendText("Error al enviar la letra.\n");
+                    areaMensajes.appendText("Error al enviar la letra\n");
                 }
             } else {
                 mostrarAlerta("Aviso", "Introduce solo 1 letra");
@@ -109,21 +114,40 @@ public class VentanaInicioFX extends Application {
         panelBotonesExtra.setAlignment(Pos.CENTER);
         Button btnCancelar = new Button("Cancelar Partida");
         Button btnPuntuacion = new Button("Mostrar Puntuación");
-        panelBotonesExtra.getChildren().addAll(btnCancelar, btnPuntuacion);
 
-        panelControles.getChildren().addAll(panelLetra, panelBotonesExtra);
-        layoutJuego.setBottom(panelControles);
+        btnPuntuacion.setOnAction(e -> {
+            try {
+                if (out != null) {
+                    out.writeUTF("-PUNTUACION-");
+                }
+            } catch (Exception ex) {
+                areaMensajes.appendText("Error al solicitar la puntuación.\n");
+            }
+        });
 
         btnCancelar.setOnAction(e -> {
             try {
+                if (out != null) {
+                    out.writeUTF("-CANCELAR-");
+                }
                 if (socket != null && !socket.isClosed()) {
                     socket.close();
                 }
             } catch (Exception ex) {
                 ex.printStackTrace();
             }
+            txtNombre.setText("");
+            txtLetra.setDisable(false);
+            areaMensajes.setText("");
+            lblPalabraOculta.setText("_ _ _ _ _ _");
+
             ventanaPrincipal.setScene(escenaInicio);
         });
+
+        panelBotonesExtra.getChildren().addAll(btnCancelar, btnPuntuacion);
+
+        panelControles.getChildren().addAll(panelLetra, panelBotonesExtra);
+        layoutJuego.setBottom(panelControles);
 
         escenaJuego = new Scene(layoutJuego, 450, 400);
     }
@@ -133,11 +157,11 @@ public class VentanaInicioFX extends Application {
             System.setProperty("javax.net.ssl.trustStore", "src/main/resources/servidor_keystore.jks");
             System.setProperty("javax.net.ssl.trustStorePassword", "123456");
 
-            javax.net.ssl.SSLSocketFactory sslFactory = (javax.net.ssl.SSLSocketFactory) javax.net.ssl.SSLSocketFactory.getDefault();
-            socket = (javax.net.ssl.SSLSocket) sslFactory.createSocket("localhost", 65000);
+            SSLSocketFactory sslFactory = (SSLSocketFactory) SSLSocketFactory.getDefault();
+            socket = (SSLSocket) sslFactory.createSocket("localhost", 65000);
 
-            out = new java.io.DataOutputStream(socket.getOutputStream());
-            in = new java.io.DataInputStream(socket.getInputStream());
+            out = new DataOutputStream(socket.getOutputStream());
+            in = new DataInputStream(socket.getInputStream());
 
             out.writeUTF(nombre);
 
@@ -155,7 +179,7 @@ public class VentanaInicioFX extends Application {
                         String mensaje = in.readUTF();
                         String tablero = in.readUTF();
 
-                        javafx.application.Platform.runLater(() -> {
+                        Platform.runLater(() -> {
                             areaMensajes.appendText(mensaje + "\n");
                             lblPalabraOculta.setText(tablero);
 
@@ -165,7 +189,7 @@ public class VentanaInicioFX extends Application {
                         });
                     }
                 } catch (Exception e) {
-                    javafx.application.Platform.runLater(() ->
+                    Platform.runLater(() ->
                             areaMensajes.appendText("Desconectado del servidor\n")
                     );
                 }
