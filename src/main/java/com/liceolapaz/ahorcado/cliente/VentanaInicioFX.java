@@ -56,7 +56,7 @@ public class VentanaInicioFX extends Application {
             if (!nombre.isEmpty()) {
                 conectarAlServidor(nombre);
             } else {
-                mostrarAlerta("Error", "Introduce tu nombre.");
+                mostrarAlerta("Error", "Introduce tu nombre");
             }
         });
 
@@ -87,6 +87,22 @@ public class VentanaInicioFX extends Application {
         txtLetra = new TextField();
         txtLetra.setPrefWidth(50);
         Button btnEnviar = new Button("Enviar");
+
+        btnEnviar.setOnAction(e -> {
+            String letra = txtLetra.getText().trim().toUpperCase();
+            if (letra.length() == 1) {
+                try {
+                    out.writeUTF(letra);
+                    txtLetra.setText("");
+                    areaMensajes.appendText("Has enviado la letra: " + letra + "\n");
+                } catch (Exception ex) {
+                    areaMensajes.appendText("Error al enviar la letra.\n");
+                }
+            } else {
+                mostrarAlerta("Aviso", "Introduce solo 1 letra");
+            }
+        });
+
         panelLetra.getChildren().addAll(txtLetra, btnEnviar);
 
         HBox panelBotonesExtra = new HBox(15);
@@ -98,7 +114,16 @@ public class VentanaInicioFX extends Application {
         panelControles.getChildren().addAll(panelLetra, panelBotonesExtra);
         layoutJuego.setBottom(panelControles);
 
-        btnCancelar.setOnAction(e -> ventanaPrincipal.setScene(escenaInicio));
+        btnCancelar.setOnAction(e -> {
+            try {
+                if (socket != null && !socket.isClosed()) {
+                    socket.close();
+                }
+            } catch (Exception ex) {
+                ex.printStackTrace();
+            }
+            ventanaPrincipal.setScene(escenaInicio);
+        });
 
         escenaJuego = new Scene(layoutJuego, 450, 400);
     }
@@ -116,14 +141,41 @@ public class VentanaInicioFX extends Application {
 
             out.writeUTF(nombre);
 
-            String respuesta = in.readUTF();
+            String mensajeBienvenida = in.readUTF();
+            String palabraOcultaInicial = in.readUTF();
 
-            areaMensajes.setText(respuesta + "\n");
+            areaMensajes.setText(mensajeBienvenida + "\n");
+            lblPalabraOculta.setText(palabraOcultaInicial);
+
             ventanaPrincipal.setScene(escenaJuego);
+
+            Thread hiloEscucha = new Thread(() -> {
+                try {
+                    while (true) {
+                        String mensaje = in.readUTF();
+                        String tablero = in.readUTF();
+
+                        javafx.application.Platform.runLater(() -> {
+                            areaMensajes.appendText(mensaje + "\n");
+                            lblPalabraOculta.setText(tablero);
+
+                            if (mensaje.contains("¡HAS GANADO!") || mensaje.contains("¡HAS PERDIDO!")) {
+                                txtLetra.setDisable(true);
+                            }
+                        });
+                    }
+                } catch (Exception e) {
+                    javafx.application.Platform.runLater(() ->
+                            areaMensajes.appendText("Desconectado del servidor\n")
+                    );
+                }
+            });
+            hiloEscucha.setDaemon(true);
+            hiloEscucha.start();
 
         } catch (Exception e) {
             e.printStackTrace();
-            mostrarAlerta("Error de Conexión", "No se pudo conectar al servidor.\nAsegúrate de que está encendido.\nDetalle: " + e.getMessage());
+            mostrarAlerta("Error de Conexión", "No se pudo conectar al servidor");
         }
     }
 
