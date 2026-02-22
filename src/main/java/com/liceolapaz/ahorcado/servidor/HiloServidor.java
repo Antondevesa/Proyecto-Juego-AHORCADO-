@@ -2,6 +2,7 @@ package com.liceolapaz.ahorcado.servidor;
 
 import com.liceolapaz.ahorcado.modelo.Jugador;
 import com.liceolapaz.ahorcado.modelo.Palabra;
+import com.liceolapaz.ahorcado.modelo.Puntuacion;
 import org.hibernate.Session;
 import org.hibernate.SessionFactory;
 import org.hibernate.Transaction;
@@ -12,6 +13,7 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.Socket;
+import java.time.LocalDateTime;
 
 public class HiloServidor implements Runnable {
     private Socket socket;
@@ -43,7 +45,6 @@ public class HiloServidor implements Runnable {
             long idAleatorio = (long) (Math.random() * 50) + 1;
             String palabraReal = obtenerPalabraAleatoria(idAleatorio);
 
-            // 3. Preparar la partida
             int intentosMaximos = palabraReal.length() / 2;
             int intentosRestantes = intentosMaximos;
 
@@ -52,18 +53,23 @@ public class HiloServidor implements Runnable {
                 letrasDescubiertas[i] = '_';
             }
 
-            System.out.println("🎯 Partida: " + jugador.getNombre() + " | Palabra: " + palabraReal + " | Intentos: " + intentosMaximos);
-
-            out.writeUTF("¡Bienvenido " + jugador.getNombre() + "!\nTienes " + intentosMaximos + " intentos para adivinar.");
+            out.writeUTF("¡Bienvenido " + jugador.getNombre() + "!\nTienes " + intentosMaximos + " intentos.");
             out.writeUTF(formatearPalabra(letrasDescubiertas));
 
             boolean juegoTerminado = false;
 
             while (!juegoTerminado && intentosRestantes > 0) {
-
-                String letraRecibida = in.readUTF();
-                char letra = letraRecibida.charAt(0);
-
+                String inputRecibido = in.readUTF();
+                if (inputRecibido.equals("-CANCELAR-")) {
+                    System.out.println("Partida cancelada por: " + jugador.getNombre());
+                    break; // Salimos del bucle sin guardar nada
+                } else if (inputRecibido.equals("-PUNTUACION-")) {
+                    int puntosTotales = obtenerPuntuacionTotal(jugador.getId());
+                    out.writeUTF("PUNTUACIÓN GLOBAL: Tienes un total de " + puntosTotales + " puntos.");
+                    out.writeUTF(formatearPalabra(letrasDescubiertas)); // Reenviamos el tablero intacto
+                    continue;
+                }
+                char letra = inputRecibido.charAt(0);
                 boolean acierto = false;
 
                 for (int i = 0; i < palabraReal.length(); i++) {
@@ -75,17 +81,20 @@ public class HiloServidor implements Runnable {
 
                 String tableroActualizado = formatearPalabra(letrasDescubiertas);
                 String mensaje = "";
-
                 if (String.valueOf(letrasDescubiertas).equals(palabraReal)) {
-                    mensaje = "🏆 ¡HAS GANADO! La palabra era: " + palabraReal;
+                    int puntosGanados = (palabraReal.length() < 10) ? 1 : 2;
+                    guardarPartida(jugador, true, puntosGanados); // Guardar en BD
+
+                    mensaje = "HAS GANADO (+" + puntosGanados + " pts). La palabra era: " + palabraReal;
                     juegoTerminado = true;
                 } else {
                     if (acierto) {
-                        mensaje = "Acierto La letra '" + letra + "' está en la palabra.";
+                        mensaje = "Acierto. La letra '" + letra + "' está en la palabra.";
                     } else {
                         intentosRestantes--;
                         if (intentosRestantes == 0) {
-                            mensaje = "HAS PERDIDO Te has quedado sin intentos. La palabra era: " + palabraReal;
+                            guardarPartida(jugador, false, 0);
+                            mensaje = "HAS PERDIDO. Te has quedado sin intentos. La palabra era: " + palabraReal;
                             tableroActualizado = formatearPalabra(palabraReal.toCharArray());
                             juegoTerminado = true;
                         } else {
@@ -99,7 +108,7 @@ public class HiloServidor implements Runnable {
             }
 
         } catch (IOException e) {
-            System.err.println("Cliente desconectado abruptamente: " + e.getMessage());
+            System.err.println("Cliente desconectado: " + e.getMessage());
         } finally {
             try {
                 socket.close();
@@ -112,19 +121,14 @@ public class HiloServidor implements Runnable {
         Session session = factory.openSession();
         Transaction tx = null;
         Jugador j = null;
-
         try {
             tx = session.beginTransaction();
             Query<Jugador> query = session.createQuery("FROM Jugador WHERE nombre = :nombre", Jugador.class);
             query.setParameter("nombre", nombre);
             j = query.uniqueResult();
-
             if (j == null) {
                 j = new Jugador(nombre);
                 session.persist(j);
-                System.out.println(" Nuevo jugador registrado: " + nombre);
-            } else {
-                System.out.println("Jugador habitual conectado: " + nombre);
             }
             tx.commit();
         } catch (Exception e) {
@@ -141,9 +145,7 @@ public class HiloServidor implements Runnable {
         String textoPalabra = "ERROR";
         try {
             Palabra p = session.get(Palabra.class, id);
-            if (p != null) {
-                textoPalabra = p.getPalabra();
-            }
+            if (p != null) textoPalabra = p.getPalabra();
         } finally {
             session.close();
         }
@@ -156,5 +158,38 @@ public class HiloServidor implements Runnable {
             sb.append(c).append(" ");
         }
         return sb.toString().trim();
+    }
+
+    private void guardarPartida(Jugador jugador, boolean acierto, int puntos) {
+        Session session = factory.openSession();
+        Transaction tx = null;
+        try {
+            tx = session.beginTransaction();
+            Puntuacion p = new Puntuacion(jugador, LocalDateTime.now(), acierto, puntos);
+            session.persist(p);
+            tx.commit();
+            System.out.println("💾 Partida guardada en BD para " + jugador.getNombre());
+        } catch (Exception e) {
+            if (tx != null) tx.rollback();
+            e.printStackTrace();
+        } finally {
+            session.close();
+        }
+    }
+
+    private int obtenerPuntuacionTotal(Long idJugador) {
+        Session session = factory.openSession();
+        int total = 0;
+        try {
+            Query<Long> query = session.createQuery("SELECT SUM(p.puntosGanados) FROM Puntuacion p WHERE p.jugador.id = :id", Long.class);
+            query.setParameter("id", idJugador);
+            Long resultado = query.uniqueResult();
+            if (resultado != null) {
+                total = resultado.intValue();
+            }
+        } finally {
+            session.close();
+        }
+        return total;
     }
 }
